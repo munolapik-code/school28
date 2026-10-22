@@ -204,7 +204,7 @@
 
   <!-- ЛОГИКА И FIREBASE -->
   <script>
-    // ТВОЯ КОНФИГУРАЦИЯ FIREBASE
+    // КОНФИГУРАЦИЯ FIREBASE
     const firebaseConfig = {
       apiKey: "AIzaSyDJsIf3QP9Dq8cuTjFGouaofunlljQ-SIg",
       authDomain: "school28journal.firebaseapp.com",
@@ -228,6 +228,15 @@
     let currentUser = null;
     let currentOpenClass = null;
 
+    // ВСПОМОГАТЕЛЬНАЯ ФУНКЦИЯ ДЛЯ ПОЛУЧЕНИЯ ТЕКУЩЕЙ ДАТЫ В ФОРМАТЕ YYYY-MM-DD
+    function getTodayDateString() {
+      const d = new Date();
+      const year = d.getFullYear();
+      const month = String(d.getMonth() + 1).padStart(2, '0');
+      const day = String(d.getDate()).padStart(2, '0');
+      return `${year}-${month}-${day}`;
+    }
+
     // ЗАГРУЗКА И СИНХРОНИЗАЦИЯ С ОБЛАКОМ
     async function syncDataFromCloud(callback) {
       try {
@@ -236,7 +245,6 @@
         if (doc.exists) {
           DB = doc.data();
         } else {
-          // Запасной блок: создается только если база пустая
           DB = {
             users: [],
             classes: [],
@@ -367,11 +375,13 @@
         let goodCount = 0;
         let badCount = 0;
 
-        Object.values(userGrades).forEach(subGrades => {
-          subGrades.forEach(g => {
-            const val = parseInt(g.grade);
-            if (val >= 4) goodCount++;
-            else if (val < 4) badCount++;
+        Object.values(userGrades).forEach(subDates => {
+          Object.values(subDates).forEach(lessons => {
+            lessons.forEach(g => {
+              const val = parseInt(g.grade);
+              if (val >= 4) goodCount++;
+              else if (val < 4) badCount++;
+            });
           });
         });
 
@@ -400,12 +410,19 @@
         `;
 
         (DB.subjects || []).forEach(sub => {
-          const gradesList = userGrades[sub] || [];
+          const subDates = userGrades[sub] || {};
+          let allSubGrades = [];
+          Object.keys(subDates).forEach(dateStr => {
+            subDates[dateStr].forEach(item => {
+              allSubGrades.push(`${item.grade} <span class="text-[10px] text-slate-400">(${dateStr})</span>`);
+            });
+          });
+
           html += `
             <div class="p-3 bg-slate-50 rounded-xl flex items-center justify-between">
               <span class="font-medium text-sm text-slate-700">${sub}</span>
               <div class="flex flex-wrap gap-1">
-                ${gradesList.length > 0 ? gradesList.map(g => `<span class="px-2.5 py-1 bg-blue-100 text-blue-800 text-xs font-bold rounded-lg">${g.grade}</span>`).join('') : '<span class="text-xs text-slate-400">Нет оценок</span>'}
+                ${allSubGrades.length > 0 ? allSubGrades.map(gStr => `<span class="px-2.5 py-1 bg-blue-100 text-blue-800 text-xs font-bold rounded-lg">${gStr}</span>`).join('') : '<span class="text-xs text-slate-400">Нет оценок</span>'}
               </div>
             </div>
           `;
@@ -432,6 +449,7 @@
       const cls = (DB.classes || []).find(c => c.id === classId);
       const students = (DB.users || []).filter(u => u.role === 'student' && u.classId === classId);
       const teachers = (DB.users || []).filter(u => u.role === 'teacher' && u.classId === classId);
+      const today = getTodayDateString();
 
       document.getElementById('content-area').innerHTML = `
         <div class="space-y-6">
@@ -444,11 +462,17 @@
           <div class="bg-white p-5 rounded-2xl border shadow-sm space-y-4">
             <div class="flex flex-col sm:flex-row sm:items-center justify-between gap-3">
               <h3 class="font-bold text-slate-800"><i class="fa-solid fa-book-open text-blue-600 mr-2"></i>Электронный журнал</h3>
-              <div class="flex items-center gap-2">
-                <label class="text-xs font-semibold text-slate-600">Выбор предмета:</label>
-                <select id="journal-subject-select" onchange="renderJournalTable('${classId}')" class="px-3 py-1.5 border rounded-xl text-sm bg-white font-medium">
-                  ${(DB.subjects || []).map(s => `<option value="${s}">${s}</option>`).join('')}
-                </select>
+              <div class="flex flex-wrap items-center gap-3">
+                <div class="flex items-center gap-2">
+                  <label class="text-xs font-semibold text-slate-600">Дата:</label>
+                  <input type="date" id="journal-date-input" value="${today}" onchange="renderJournalTable('${classId}')" class="px-3 py-1.5 border rounded-xl text-sm bg-white font-medium">
+                </div>
+                <div class="flex items-center gap-2">
+                  <label class="text-xs font-semibold text-slate-600">Предмет:</label>
+                  <select id="journal-subject-select" onchange="renderJournalTable('${classId}')" class="px-3 py-1.5 border rounded-xl text-sm bg-white font-medium">
+                    ${(DB.subjects || []).map(s => `<option value="${s}">${s}</option>`).join('')}
+                  </select>
+                </div>
               </div>
             </div>
             <div id="journal-table-container" class="overflow-x-auto pt-2"></div>
@@ -460,11 +484,15 @@
 
     function renderJournalTable(classId) {
       const subjectSelect = document.getElementById('journal-subject-select');
+      const dateInput = document.getElementById('journal-date-input');
+      
       if (!subjectSelect || !subjectSelect.value) {
         document.getElementById('journal-table-container').innerHTML = `<p class="text-center text-slate-400 py-6">Нет добавленных предметов.</p>`;
         return;
       }
+      
       const subject = subjectSelect.value;
+      const selectedDate = dateInput ? dateInput.value : getTodayDateString();
       const container = document.getElementById('journal-table-container');
       const students = (DB.users || []).filter(u => u.role === 'student' && u.classId === classId);
 
@@ -478,7 +506,7 @@
       html += `</tr></thead><tbody class="divide-y text-sm">`;
 
       students.forEach(st => {
-        const studentGrades = (DB.grades && DB.grades[st.id] && DB.grades[st.id][subject]) ? DB.grades[st.id][subject] : [];
+        const studentGrades = (DB.grades && DB.grades[st.id] && DB.grades[st.id][subject] && DB.grades[st.id][subject][selectedDate]) ? DB.grades[st.id][subject][selectedDate] : [];
         html += `<tr class="hover:bg-slate-50/50"><td class="p-3 font-semibold text-slate-800">${st.name}</td>`;
 
         for (let lesson = 1; lesson <= 5; lesson++) {
@@ -490,7 +518,7 @@
             <td class="p-2 text-center">
               ${canEdit ? `
                 <input type="text" maxlength="2" value="${currentGrade}" 
-                  onchange="saveGrade('${st.id}', '${subject}', ${lesson}, this.value)"
+                  onchange="saveGrade('${st.id}', '${subject}', '${selectedDate}', ${lesson}, this.value)"
                   class="w-12 h-10 text-center font-bold border rounded-lg focus:ring-2 focus:ring-blue-500 focus:outline-none ${currentGrade ? 'bg-blue-50 text-blue-700 border-blue-200' : 'bg-white'}" placeholder="-">
               ` : `
                 <span class="font-bold text-blue-700">${currentGrade || '-'}</span>
@@ -504,12 +532,13 @@
       container.innerHTML = html;
     }
 
-    async function saveGrade(studentId, subject, lesson, value) {
+    async function saveGrade(studentId, subject, dateStr, lesson, value) {
       if (!DB.grades) DB.grades = {};
       if (!DB.grades[studentId]) DB.grades[studentId] = {};
-      if (!DB.grades[studentId][subject]) DB.grades[studentId][subject] = [];
+      if (!DB.grades[studentId][subject]) DB.grades[studentId][subject] = {};
+      if (!DB.grades[studentId][subject][dateStr]) DB.grades[studentId][subject][dateStr] = [];
 
-      const list = DB.grades[studentId][subject];
+      const list = DB.grades[studentId][subject][dateStr];
       const existingIndex = list.findIndex(g => g.lesson === lesson);
 
       if (value.trim() === '') {
