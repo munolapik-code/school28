@@ -1,0 +1,771 @@
+<!DOCTYPE html>
+<html lang="ru">
+<head>
+  <meta charset="UTF-8">
+  <meta name="viewport" content="width=device-width, initial-scale=1.0">
+  <title>Электронный журнал — Школа №28</title>
+  <!-- Tailwind CSS -->
+  <script src="https://cdn.tailwindcss.com"></script>
+  <!-- FontAwesome Иконки -->
+  <link rel="stylesheet" href="https://cdnjs.cloudflare.com/ajax/libs/font-awesome/6.4.0/css/all.min.css">
+  <!-- Firebase SDK (Compat верcии для работы в одном HTML файле) -->
+  <script src="https://www.gstatic.com/firebasejs/9.23.0/firebase-app-compat.js"></script>
+  <script src="https://www.gstatic.com/firebasejs/9.23.0/firebase-firestore-compat.js"></script>
+  <style>
+    body { font-family: 'Segoe UI', Tahoma, Geneva, Verdana, sans-serif; }
+    .glass { background: rgba(255, 255, 255, 0.95); backdrop-filter: blur(10px); }
+  </style>
+</head>
+<body class="bg-slate-100 min-h-screen text-slate-800">
+
+  <!-- ОКНО ВХОДА -->
+  <div id="login-screen" class="fixed inset-0 bg-gradient-to-br from-blue-900 via-indigo-900 to-slate-900 flex items-center justify-center p-4 z-50">
+    <div class="glass max-w-md w-full p-8 rounded-2xl shadow-2xl border border-white/20 text-center">
+      <div class="w-20 h-20 bg-blue-600 text-white rounded-full flex items-center justify-center mx-auto mb-4 text-3xl shadow-lg">
+        <i class="fa-solid fa-school"></i>
+      </div>
+      <h1 class="text-2xl font-bold text-slate-900 mb-1">Электронный журнал</h1>
+      <h2 class="text-lg font-medium text-blue-600 mb-6">Школа №28</h2>
+
+      <form id="login-form" class="space-y-4 text-left">
+        <div>
+          <label class="block text-sm font-semibold mb-1 text-slate-700">Логин</label>
+          <input type="text" id="login-input" required class="w-full px-4 py-2.5 rounded-xl border border-slate-300 focus:ring-2 focus:ring-blue-500 focus:outline-none transition" placeholder="Введите логин">
+        </div>
+        <div>
+          <label class="block text-sm font-semibold mb-1 text-slate-700">Пароль</label>
+          <input type="password" id="password-input" required class="w-full px-4 py-2.5 rounded-xl border border-slate-300 focus:ring-2 focus:ring-blue-500 focus:outline-none transition" placeholder="Введите пароль">
+        </div>
+
+        <div id="login-error" class="hidden p-3 bg-red-100 border border-red-300 text-red-700 text-sm rounded-xl text-center font-medium">
+          Неверный логин или пароль
+        </div>
+
+        <button type="submit" id="login-btn" class="w-full py-3 bg-blue-600 hover:bg-blue-700 text-white font-semibold rounded-xl shadow-md hover:shadow-lg transition flex items-center justify-center gap-2">
+          <i class="fa-solid fa-right-to-bracket"></i> Войти
+        </button>
+      </form>
+    </div>
+  </div>
+
+  <!-- ОСНОВНОЕ ПРИЛОЖЕНИЕ -->
+  <div id="app-screen" class="hidden flex flex-col min-h-screen">
+    
+    <!-- ВЕРХНЯЯ ПАНЕЛЬ (ШАПКА) -->
+    <header class="bg-white shadow-md border-b sticky top-0 z-30">
+      <div class="max-w-7xl mx-auto px-4 py-3 flex items-center justify-between">
+        <div class="flex items-center gap-3">
+          <div class="bg-blue-600 text-white p-2.5 rounded-xl text-xl shadow">
+            <i class="fa-solid fa-school"></i>
+          </div>
+          <div>
+            <h1 class="font-bold text-slate-900 leading-tight">Школа №28</h1>
+            <p class="text-xs text-slate-500 font-medium">Электронный журнал</p>
+          </div>
+        </div>
+
+        <!-- Профиль пользователя -->
+        <div class="flex items-center gap-3 relative">
+          <div class="text-right hidden sm:block">
+            <div id="user-display-name" class="font-bold text-sm text-slate-800">—</div>
+            <div id="user-display-role" class="text-xs text-blue-600 font-semibold uppercase tracking-wider">—</div>
+          </div>
+          <button onclick="toggleSettingsModal()" class="w-10 h-10 bg-slate-200 hover:bg-slate-300 rounded-full flex items-center justify-center text-slate-700 font-bold transition shadow-sm border border-slate-300">
+            <i class="fa-solid fa-user"></i>
+          </button>
+          <button onclick="logout()" title="Выйти из аккаунта" class="text-slate-400 hover:text-red-600 p-2 text-lg transition ml-1">
+            <i class="fa-solid fa-arrow-right-from-bracket"></i>
+          </button>
+        </div>
+      </div>
+    </header>
+
+    <!-- ОСНОВНОЙ КОНТЕНТ -->
+    <main class="flex-1 max-w-7xl w-full mx-auto p-4 md:p-6 space-y-6">
+      
+      <!-- Панель с приветствием и кнопками навигации -->
+      <div class="bg-white p-5 rounded-2xl shadow-sm border flex flex-col md:flex-row md:items-center justify-between gap-4">
+        <div>
+          <h2 id="welcome-message" class="text-xl font-bold text-slate-900">Добро пожаловать!</h2>
+          <p id="welcome-sub" class="text-sm text-slate-500">Панель управления электронным журналом</p>
+        </div>
+
+        <!-- Кнопки управления (динамические) -->
+        <div class="flex flex-wrap items-center gap-2">
+          <button id="btn-back" onclick="showMainDashboard()" class="hidden px-4 py-2 bg-slate-200 hover:bg-slate-300 text-slate-700 text-sm font-semibold rounded-xl transition flex items-center gap-2">
+            <i class="fa-solid fa-arrow-left"></i> Назад на главную
+          </button>
+
+          <!-- Кнопки для Директора -->
+          <div id="director-nav" class="hidden flex flex-wrap gap-2">
+            <button onclick="showTeachersSection()" class="px-3.5 py-2 bg-blue-50 hover:bg-blue-100 text-blue-700 text-sm font-semibold rounded-xl transition flex items-center gap-1.5 border border-blue-200">
+              <i class="fa-solid fa-chalkboard-user"></i> Учителя
+            </button>
+            <button onclick="showStudentsSection()" class="px-3.5 py-2 bg-indigo-50 hover:bg-indigo-100 text-indigo-700 text-sm font-semibold rounded-xl transition flex items-center gap-1.5 border border-indigo-200">
+              <i class="fa-solid fa-user-graduate"></i> Ученики
+            </button>
+            <button onclick="openAddClassModal()" class="px-3.5 py-2 bg-emerald-50 hover:bg-emerald-100 text-emerald-700 text-sm font-semibold rounded-xl transition flex items-center gap-1.5 border border-emerald-200">
+              <i class="fa-solid fa-plus"></i> Добавить класс
+            </button>
+            <button onclick="showScheduleSection()" class="px-3.5 py-2 bg-amber-50 hover:bg-amber-100 text-amber-700 text-sm font-semibold rounded-xl transition flex items-center gap-1.5 border border-amber-200">
+              <i class="fa-solid fa-calendar-days"></i> Расписание
+            </button>
+            <button onclick="showSubjectsSection()" class="px-3.5 py-2 bg-purple-50 hover:bg-purple-100 text-purple-700 text-sm font-semibold rounded-xl transition flex items-center gap-1.5 border border-purple-200">
+              <i class="fa-solid fa-book"></i> Предметы
+            </button>
+          </div>
+        </div>
+      </div>
+
+      <!-- ВИДЖЕТЫ / СЕКЦИИ -->
+      <div id="content-area"></div>
+
+    </main>
+  </div>
+
+  <!-- МОДАЛЬНЫЕ ОКНА -->
+
+  <!-- Настройки / Смена пароля -->
+  <div id="modal-settings" class="hidden fixed inset-0 bg-black/50 z-50 flex items-center justify-center p-4">
+    <div class="bg-white max-w-md w-full rounded-2xl p-6 shadow-2xl border space-y-4">
+      <div class="flex justify-between items-center border-b pb-3">
+        <h3 class="text-lg font-bold text-slate-800"><i class="fa-solid fa-gear text-blue-600 mr-2"></i>Настройки профиля</h3>
+        <button onclick="toggleSettingsModal()" class="text-slate-400 hover:text-slate-600"><i class="fa-solid fa-xmark text-xl"></i></button>
+      </div>
+      <div>
+        <label class="block text-sm font-semibold text-slate-700 mb-1">Новый пароль</label>
+        <input type="password" id="new-password-input" class="w-full px-4 py-2 rounded-xl border focus:ring-2 focus:ring-blue-500 focus:outline-none" placeholder="Введите новый пароль">
+        <p id="change-pass-msg" class="text-xs mt-1 text-slate-500"></p>
+      </div>
+      <div class="flex justify-end gap-2 pt-2">
+        <button onclick="toggleSettingsModal()" class="px-4 py-2 bg-slate-100 hover:bg-slate-200 rounded-xl text-slate-700 font-medium text-sm">Отмена</button>
+        <button onclick="saveNewPassword()" class="px-4 py-2 bg-blue-600 hover:bg-blue-700 text-white rounded-xl font-medium text-sm shadow">Сохранить</button>
+      </div>
+    </div>
+  </div>
+
+  <!-- Добавить/Редактировать пользователя (Учитель / Ученик) -->
+  <div id="modal-user" class="hidden fixed inset-0 bg-black/50 z-50 flex items-center justify-center p-4">
+    <div class="bg-white max-w-md w-full rounded-2xl p-6 shadow-2xl border space-y-4">
+      <div class="flex justify-between items-center border-b pb-3">
+        <h3 id="modal-user-title" class="text-lg font-bold text-slate-800">Пользователь</h3>
+        <button onclick="closeUserModal()" class="text-slate-400 hover:text-slate-600"><i class="fa-solid fa-xmark text-xl"></i></button>
+      </div>
+      <input type="hidden" id="edit-user-id">
+      <input type="hidden" id="edit-user-role">
+      <div class="space-y-3">
+        <div>
+          <label class="block text-xs font-semibold text-slate-700 mb-1">Имя и Фамилия</label>
+          <input type="text" id="user-fullname" class="w-full px-3 py-2 rounded-xl border text-sm" placeholder="Иван Иванов">
+        </div>
+        <div class="grid grid-cols-2 gap-2">
+          <div>
+            <label class="block text-xs font-semibold text-slate-700 mb-1">Логин</label>
+            <input type="text" id="user-login" class="w-full px-3 py-2 rounded-xl border text-sm" placeholder="Логин">
+          </div>
+          <div>
+            <label class="block text-xs font-semibold text-slate-700 mb-1">Пароль</label>
+            <input type="password" id="user-password" class="w-full px-3 py-2 rounded-xl border text-sm" placeholder="Пароль">
+          </div>
+        </div>
+        <div>
+          <label class="block text-xs font-semibold text-slate-700 mb-1">Класс</label>
+          <select id="user-class-select" class="w-full px-3 py-2 rounded-xl border text-sm bg-white"></select>
+        </div>
+        <div class="flex items-center gap-2 pt-1">
+          <input type="checkbox" id="user-allow-pass" class="w-4 h-4 text-blue-600 rounded">
+          <label for="user-allow-pass" class="text-xs text-slate-700 font-medium">Разрешить менять пароль</label>
+        </div>
+      </div>
+      <div class="flex justify-end gap-2 pt-2">
+        <button onclick="closeUserModal()" class="px-4 py-2 bg-slate-100 rounded-xl text-slate-700 font-medium text-sm">Отмена</button>
+        <button onclick="saveUserFromModal()" class="px-4 py-2 bg-blue-600 text-white rounded-xl font-medium text-sm shadow">Сохранить</button>
+      </div>
+    </div>
+  </div>
+
+  <!-- Добавить класс -->
+  <div id="modal-add-class" class="hidden fixed inset-0 bg-black/50 z-50 flex items-center justify-center p-4">
+    <div class="bg-white max-w-md w-full rounded-2xl p-6 shadow-2xl border space-y-4">
+      <div class="flex justify-between items-center border-b pb-3">
+        <h3 class="text-lg font-bold text-slate-800"><i class="fa-solid fa-users-rectangle text-emerald-600 mr-2"></i>Добавить класс</h3>
+        <button onclick="closeAddClassModal()" class="text-slate-400 hover:text-slate-600"><i class="fa-solid fa-xmark text-xl"></i></button>
+      </div>
+      <div>
+        <label class="block text-sm font-semibold text-slate-700 mb-1">Название класса</label>
+        <input type="text" id="class-name-input" class="w-full px-4 py-2 rounded-xl border focus:ring-2 focus:ring-emerald-500 focus:outline-none" placeholder="Например: 5-А или 10-Б">
+      </div>
+      <div class="flex justify-end gap-2 pt-2">
+        <button onclick="closeAddClassModal()" class="px-4 py-2 bg-slate-100 hover:bg-slate-200 rounded-xl text-slate-700 font-medium text-sm">Отмена</button>
+        <button onclick="saveClass()" class="px-4 py-2 bg-emerald-600 hover:bg-emerald-700 text-white rounded-xl font-medium text-sm shadow">Добавить</button>
+      </div>
+    </div>
+  </div>
+
+  <!-- ЛОГИКА И FIREBASE -->
+  <script>
+    // ТВОЯ КОНФИГУРАЦИЯ FIREBASE
+    const firebaseConfig = {
+      apiKey: "AIzaSyDJsIf3QP9Dq8cuTjFGouaofunlljQ-SIg",
+      authDomain: "school28journal.firebaseapp.com",
+      projectId: "school28journal",
+      storageBucket: "school28journal.firebasestorage.app",
+      messagingSenderId: "485871753335",
+      appId: "1:485871753335:web:35710b010800d35c9f0e72"
+    };
+
+    firebase.initializeApp(firebaseConfig);
+    const db = firebase.firestore();
+
+    let DB = {
+      users: [],
+      classes: [],
+      schedules: {},
+      subjects: ['Математика', 'Русский язык', 'История', 'Физика', 'Биология'],
+      grades: {}
+    };
+
+    let currentUser = null;
+    let currentOpenClass = null;
+
+    // ЗАГРУЗКА И СИНХРОНИЗАЦИЯ С ОБЛАКОМ
+    async function syncDataFromCloud(callback) {
+      try {
+        const docRef = db.collection("schoolData").doc("mainDoc");
+        const doc = await docRef.get();
+        if (doc.exists) {
+          DB = doc.data();
+        } else {
+          // Стандартная инициализация директора
+          DB = {
+            users: [
+              { id: '1', login: 'Denis860', password: 'school2026qwertyI', name: 'Денис Демидов', role: 'director', allowPassChange: true }
+            ],
+            classes: [],
+            schedules: {},
+            subjects: ['Математика', 'Русский язык', 'История', 'Физика', 'Биология'],
+            grades: {}
+          };
+          await docRef.set(DB);
+        }
+        if (callback) callback();
+      } catch (err) {
+        console.error("Ошибка сети или базы: ", err);
+      }
+    }
+
+    async function saveToCloud() {
+      try {
+        await db.collection("schoolData").doc("mainDoc").set(DB);
+      } catch (err) {
+        console.error("Ошибка сохранения: ", err);
+      }
+    }
+
+    // ВХОД
+    document.getElementById('login-form').addEventListener('submit', async (e) => {
+      e.preventDefault();
+      const btn = document.getElementById('login-btn');
+      btn.innerText = "Загрузка...";
+      
+      const login = document.getElementById('login-input').value.trim();
+      const pass = document.getElementById('password-input').value.trim();
+      
+      await syncDataFromCloud(() => {
+        const user = DB.users.find(u => u.login === login && u.password === pass);
+        btn.innerHTML = `<i class="fa-solid fa-right-to-bracket"></i> Войти`;
+
+        if (user) {
+          currentUser = user;
+          document.getElementById('login-error').classList.add('hidden');
+          document.getElementById('login-screen').classList.add('hidden');
+          document.getElementById('app-screen').classList.remove('hidden');
+          initApp();
+        } else {
+          document.getElementById('login-error').classList.remove('hidden');
+        }
+      });
+    });
+
+    function logout() {
+      currentUser = null;
+      document.getElementById('app-screen').classList.add('hidden');
+      document.getElementById('login-screen').classList.remove('hidden');
+      document.getElementById('login-input').value = '';
+      document.getElementById('password-input').value = '';
+    }
+
+    async function initApp() {
+      await syncDataFromCloud();
+      document.getElementById('user-display-name').innerText = currentUser.name;
+      const roleMap = { director: 'Директор', teacher: 'Учитель', student: 'Ученик' };
+      document.getElementById('user-display-role').innerText = roleMap[currentUser.role] || currentUser.role;
+
+      const dirNav = document.getElementById('director-nav');
+      if (currentUser.role === 'director') {
+        dirNav.classList.remove('hidden');
+      } else {
+        dirNav.classList.add('hidden');
+      }
+
+      showMainDashboard();
+    }
+
+    // ГЛАВНЫЙ ЭКРАН
+    async function showMainDashboard() {
+      await syncDataFromCloud();
+      document.getElementById('btn-back').classList.add('hidden');
+      currentOpenClass = null;
+
+      const welcomeTitle = document.getElementById('welcome-message');
+      const welcomeSub = document.getElementById('welcome-sub');
+      const contentArea = document.getElementById('content-area');
+      contentArea.innerHTML = '';
+
+      if (currentUser.role === 'director' || currentUser.role === 'teacher') {
+        welcomeTitle.innerText = `Добро пожаловать, ${currentUser.name}!`;
+        welcomeSub.innerText = currentUser.role === 'director' ? 'Панель управления директора' : 'Панель управления учителя';
+
+        let availableClasses = DB.classes;
+        if (currentUser.role === 'teacher') {
+          availableClasses = DB.classes.filter(c => currentUser.classId === c.id);
+        }
+
+        let html = `<div><h3 class="text-lg font-bold text-slate-800 mb-4 flex items-center gap-2"><i class="fa-solid fa-chalkboard text-blue-600"></i> Список классов</h3>`;
+
+        if (availableClasses.length === 0) {
+          html += `<div class="bg-white p-8 rounded-2xl shadow-sm border text-center text-slate-500"><i class="fa-solid fa-folder-open text-4xl mb-2 text-slate-300"></i><p>Нет доступных классов.</p></div>`;
+        } else {
+          html += `<div class="grid grid-cols-1 sm:grid-cols-2 md:grid-cols-3 lg:grid-cols-4 gap-4">`;
+          availableClasses.forEach(cls => {
+            const studentCount = DB.users.filter(u => u.role === 'student' && u.classId === cls.id).length;
+            const teacherCount = DB.users.filter(u => u.role === 'teacher' && u.classId === cls.id).length;
+
+            html += `
+              <div onclick="openClassView('${cls.id}')" class="bg-white p-5 rounded-2xl shadow-sm border border-slate-200 hover:shadow-md hover:border-blue-300 transition cursor-pointer flex flex-col justify-between group">
+                <div>
+                  <div class="flex items-center justify-between mb-3">
+                    <span class="text-2xl font-black text-slate-800 group-hover:text-blue-600 transition">${cls.name}</span>
+                    <i class="fa-solid fa-chevron-right text-slate-300 group-hover:text-blue-600 transition"></i>
+                  </div>
+                  <div class="space-y-1 text-xs text-slate-500">
+                    <div><i class="fa-solid fa-user-graduate mr-1"></i> Учеников: <span class="font-semibold text-slate-700">${studentCount}</span></div>
+                    <div><i class="fa-solid fa-chalkboard-user mr-1"></i> Учителей: <span class="font-semibold text-slate-700">${teacherCount}</span></div>
+                  </div>
+                </div>
+              </div>
+            `;
+          });
+          html += `</div>`;
+        }
+        html += `</div>`;
+        contentArea.innerHTML = html;
+
+      } else if (currentUser.role === 'student') {
+        welcomeTitle.innerText = `Добро пожаловать, ${currentUser.name}!`;
+        welcomeSub.innerText = 'Кабинет ученика';
+
+        const userGrades = DB.grades[currentUser.id] || {};
+        let goodCount = 0;
+        let badCount = 0;
+
+        Object.values(userGrades).forEach(subGrades => {
+          subGrades.forEach(g => {
+            const val = parseInt(g.grade);
+            if (val >= 4) goodCount++;
+            else if (val < 4) badCount++;
+          });
+        });
+
+        const cls = DB.classes.find(c => c.id === currentUser.classId);
+
+        html = `
+          <div class="grid grid-cols-1 md:grid-cols-3 gap-4 mb-6">
+            <div class="bg-white p-5 rounded-2xl border shadow-sm flex items-center gap-4">
+              <div class="w-12 h-12 bg-blue-100 text-blue-600 rounded-xl flex items-center justify-center text-xl font-bold"><i class="fa-solid fa-graduation-cap"></i></div>
+              <div><div class="text-xs text-slate-500 font-medium">Мой класс</div><div class="text-xl font-bold text-slate-800">${cls ? cls.name : 'Не указан'}</div></div>
+            </div>
+            <div class="bg-white p-5 rounded-2xl border shadow-sm flex items-center gap-4">
+              <div class="w-12 h-12 bg-emerald-100 text-emerald-600 rounded-xl flex items-center justify-center text-xl font-bold"><i class="fa-solid fa-face-smile"></i></div>
+              <div><div class="text-xs text-slate-500 font-medium">Хорошие оценки</div><div class="text-xl font-bold text-emerald-600">${goodCount}</div></div>
+            </div>
+            <div class="bg-white p-5 rounded-2xl border shadow-sm flex items-center gap-4">
+              <div class="w-12 h-12 bg-rose-100 text-rose-600 rounded-xl flex items-center justify-center text-xl font-bold"><i class="fa-solid fa-face-frown"></i></div>
+              <div><div class="text-xs text-slate-500 font-medium">Плохие оценки</div><div class="text-xl font-bold text-rose-600">${badCount}</div></div>
+            </div>
+          </div>
+
+          <div class="grid grid-cols-1 lg:grid-cols-2 gap-6">
+            <div class="bg-white p-5 rounded-2xl border shadow-sm">
+              <h3 class="font-bold text-slate-800 mb-4 flex items-center gap-2"><i class="fa-solid fa-star text-amber-500"></i> Мои оценки</h3>
+              <div class="space-y-3">
+        `;
+
+        DB.subjects.forEach(sub => {
+          const gradesList = userGrades[sub] || [];
+          html += `
+            <div class="p-3 bg-slate-50 rounded-xl flex items-center justify-between">
+              <span class="font-medium text-sm text-slate-700">${sub}</span>
+              <div class="flex flex-wrap gap-1">
+                ${gradesList.length > 0 ? gradesList.map(g => `<span class="px-2.5 py-1 bg-blue-100 text-blue-800 text-xs font-bold rounded-lg">${g.grade}</span>`).join('') : '<span class="text-xs text-slate-400">Нет оценок</span>'}
+              </div>
+            </div>
+          `;
+        });
+
+        html += `</div></div><div class="bg-white p-5 rounded-2xl border shadow-sm"><h3 class="font-bold text-slate-800 mb-4 flex items-center gap-2"><i class="fa-solid fa-calendar-week text-indigo-500"></i> Расписание</h3><div class="text-sm">`;
+        const scheduleText = DB.schedules[currentUser.classId];
+        if (scheduleText) {
+          html += `<div class="whitespace-pre-line bg-slate-50 p-4 rounded-xl text-slate-700">${scheduleText}</div>`;
+        } else {
+          html += `<p class="text-slate-400">Расписание еще не составлено.</p>`;
+        }
+        html += `</div></div></div>`;
+        contentArea.innerHTML = html;
+      }
+    }
+
+    // ПРОСМОТР ЖУРНАЛА КЛАССА
+    async function openClassView(classId) {
+      await syncDataFromCloud();
+      currentOpenClass = classId;
+      document.getElementById('btn-back').classList.remove('hidden');
+
+      const cls = DB.classes.find(c => c.id === classId);
+      const students = DB.users.filter(u => u.role === 'student' && u.classId === classId);
+      const teachers = DB.users.filter(u => u.role === 'teacher' && u.classId === classId);
+
+      document.getElementById('content-area').innerHTML = `
+        <div class="space-y-6">
+          <div class="bg-white p-5 rounded-2xl border shadow-sm flex items-center justify-between">
+            <div>
+              <h2 class="text-2xl font-black text-slate-800">Класс ${cls.name}</h2>
+              <p class="text-xs text-slate-500 mt-1">Учеников: <span class="font-semibold text-slate-700 mr-3">${students.length}</span> Учителей: <span class="font-semibold text-slate-700">${teachers.length}</span></p>
+            </div>
+          </div>
+          <div class="bg-white p-5 rounded-2xl border shadow-sm space-y-4">
+            <div class="flex flex-col sm:flex-row sm:items-center justify-between gap-3">
+              <h3 class="font-bold text-slate-800"><i class="fa-solid fa-book-open text-blue-600 mr-2"></i>Электронный журнал</h3>
+              <div class="flex items-center gap-2">
+                <label class="text-xs font-semibold text-slate-600">Выбор предмета:</label>
+                <select id="journal-subject-select" onchange="renderJournalTable('${classId}')" class="px-3 py-1.5 border rounded-xl text-sm bg-white font-medium">
+                  ${DB.subjects.map(s => `<option value="${s}">${s}</option>`).join('')}
+                </select>
+              </div>
+            </div>
+            <div id="journal-table-container" class="overflow-x-auto pt-2"></div>
+          </div>
+        </div>
+      `;
+      renderJournalTable(classId);
+    }
+
+    function renderJournalTable(classId) {
+      const subjectSelect = document.getElementById('journal-subject-select');
+      if (!subjectSelect) return;
+      const subject = subjectSelect.value;
+      const container = document.getElementById('journal-table-container');
+      const students = DB.users.filter(u => u.role === 'student' && u.classId === classId);
+
+      if (students.length === 0) {
+        container.innerHTML = `<p class="text-center text-slate-400 py-6">В этом классе пока нет учеников.</p>`;
+        return;
+      }
+
+      let html = `<table class="w-full text-left border-collapse min-w-[600px]"><thead><tr class="border-b bg-slate-50 text-slate-600 text-xs uppercase font-bold"><th class="p-3 w-48">Имя Фамилия</th>`;
+      for (let i = 1; i <= 5; i++) html += `<th class="p-3 text-center w-24">Урок ${i}</th>`;
+      html += `</tr></thead><tbody class="divide-y text-sm">`;
+
+      students.forEach(st => {
+        const studentGrades = (DB.grades[st.id] && DB.grades[st.id][subject]) ? DB.grades[st.id][subject] : [];
+        html += `<tr class="hover:bg-slate-50/50"><td class="p-3 font-semibold text-slate-800">${st.name}</td>`;
+
+        for (let lesson = 1; lesson <= 5; lesson++) {
+          const gObj = studentGrades.find(g => g.lesson === lesson);
+          const currentGrade = gObj ? gObj.grade : '';
+          const canEdit = currentUser.role === 'director' || currentUser.role === 'teacher';
+
+          html += `
+            <td class="p-2 text-center">
+              ${canEdit ? `
+                <input type="text" maxlength="2" value="${currentGrade}" 
+                  onchange="saveGrade('${st.id}', '${subject}', ${lesson}, this.value)"
+                  class="w-12 h-10 text-center font-bold border rounded-lg focus:ring-2 focus:ring-blue-500 focus:outline-none ${currentGrade ? 'bg-blue-50 text-blue-700 border-blue-200' : 'bg-white'}" placeholder="-">
+              ` : `
+                <span class="font-bold text-blue-700">${currentGrade || '-'}</span>
+              `}
+            </td>
+          `;
+        }
+        html += `</tr>`;
+      });
+      html += `</tbody></table>`;
+      container.innerHTML = html;
+    }
+
+    async function saveGrade(studentId, subject, lesson, value) {
+      if (!DB.grades[studentId]) DB.grades[studentId] = {};
+      if (!DB.grades[studentId][subject]) DB.grades[studentId][subject] = [];
+
+      const list = DB.grades[studentId][subject];
+      const existingIndex = list.findIndex(g => g.lesson === lesson);
+
+      if (value.trim() === '') {
+        if (existingIndex !== -1) list.splice(existingIndex, 1);
+      } else {
+        if (existingIndex !== -1) {
+          list[existingIndex].grade = value.trim();
+        } else {
+          list.push({ lesson: lesson, grade: value.trim() });
+        }
+      }
+      await saveToCloud();
+    }
+
+    // МОДАЛЬНЫЕ ОКНА УПРАВЛЕНИЯ ПОЛЬЗОВАТЕЛЯМИ (ДОБАВЛЕНИЕ И РЕДАКТИРОВАНИЕ)
+    function openUserModal(role, userId = null) {
+      if (DB.classes.length === 0) { alert('Сначала создайте хотя бы один класс!'); return; }
+
+      document.getElementById('edit-user-id').value = userId || '';
+      document.getElementById('edit-user-role').value = role;
+      
+      const select = document.getElementById('user-class-select');
+      select.innerHTML = DB.classes.map(c => `<option value="${c.id}">${c.name}</option>`).join('');
+
+      if (userId) {
+        // Редактирование
+        const u = DB.users.find(x => x.id === userId);
+        document.getElementById('modal-user-title').innerText = `Редактировать (${role === 'teacher' ? 'Учителя' : 'Ученика'})`;
+        document.getElementById('user-fullname').value = u.name;
+        document.getElementById('user-login').value = u.login;
+        document.getElementById('user-password').value = u.password;
+        document.getElementById('user-class-select').value = u.classId || DB.classes[0].id;
+        document.getElementById('user-allow-pass').checked = !!u.allowPassChange;
+      } else {
+        // Создание нового
+        document.getElementById('modal-user-title').innerText = `Добавить ${role === 'teacher' ? 'учителя' : 'ученика'}`;
+        document.getElementById('user-fullname').value = '';
+        document.getElementById('user-login').value = '';
+        document.getElementById('user-password').value = '';
+        document.getElementById('user-allow-pass').checked = true;
+      }
+
+      document.getElementById('modal-user').classList.remove('hidden');
+    }
+
+    function closeUserModal() { document.getElementById('modal-user').classList.add('hidden'); }
+
+    async function saveUserFromModal() {
+      const id = document.getElementById('edit-user-id').value;
+      const role = document.getElementById('edit-user-role').value;
+      const name = document.getElementById('user-fullname').value.trim();
+      const login = document.getElementById('user-login').value.trim();
+      const pass = document.getElementById('user-password').value.trim();
+      const classId = document.getElementById('user-class-select').value;
+      const allowPass = document.getElementById('user-allow-pass').checked;
+
+      if (!name || !login || !pass) { alert('Заполните все поля!'); return; }
+
+      if (id) {
+        // Обновление существующего
+        const u = DB.users.find(x => x.id === id);
+        if (u) {
+          u.name = name;
+          u.login = login;
+          u.password = pass;
+          u.classId = classId;
+          u.allowPassChange = allowPass;
+        }
+      } else {
+        // Создание нового
+        DB.users.push({
+          id: Date.now().toString(),
+          name, login, password: pass, role, classId, allowPassChange: allowPass
+        });
+      }
+
+      await saveToCloud();
+      closeUserModal();
+      if (role === 'teacher') showTeachersSection();
+      else showStudentsSection();
+    }
+
+    // СЕКЦИЯ УЧИТЕЛЕЙ
+    async function showTeachersSection() {
+      await syncDataFromCloud();
+      document.getElementById('btn-back').classList.remove('hidden');
+      const teachers = DB.users.filter(u => u.role === 'teacher');
+      let html = `<div class="bg-white p-5 rounded-2xl border shadow-sm space-y-4"><div class="flex items-center justify-between"><h3 class="font-bold text-slate-800"><i class="fa-solid fa-chalkboard-user text-blue-600 mr-2"></i>Учителя</h3><button onclick="openUserModal('teacher')" class="px-4 py-2 bg-blue-600 hover:bg-blue-700 text-white font-medium text-sm rounded-xl transition shadow"><i class="fa-solid fa-plus mr-1"></i> Добавить учителя</button></div>`;
+
+      if (teachers.length === 0) {
+        html += `<p class="text-slate-400 text-sm">Нет учителей.</p>`;
+      } else {
+        html += `<div class="divide-y">` + teachers.map(t => {
+          const cls = DB.classes.find(c => c.id === t.classId);
+          return `
+            <div class="py-3 flex items-center justify-between">
+              <div>
+                <div class="font-bold text-slate-800">${t.name}</div>
+                <div class="text-xs text-slate-500">Логин: <span class="font-semibold text-slate-700">${t.login}</span> | Пароль: <span class="font-semibold text-slate-700">${t.password}</span> | Класс: ${cls ? cls.name : 'Не привязан'}</div>
+              </div>
+              <div class="flex items-center gap-2">
+                <button onclick="openUserModal('teacher', '${t.id}')" class="text-blue-600 hover:text-blue-800 text-sm font-medium p-2"><i class="fa-solid fa-pen"></i> Редактировать</button>
+                <button onclick="deleteUser('${t.id}')" class="text-red-500 hover:text-red-700 text-sm font-medium p-2"><i class="fa-solid fa-trash"></i> Удалить</button>
+              </div>
+            </div>
+          `;
+        }).join('') + `</div>`;
+      }
+      html += `</div>`;
+      document.getElementById('content-area').innerHTML = html;
+    }
+
+    // СЕКЦИЯ УЧЕНИКОВ
+    async function showStudentsSection() {
+      await syncDataFromCloud();
+      document.getElementById('btn-back').classList.remove('hidden');
+      const students = DB.users.filter(u => u.role === 'student');
+      let html = `<div class="bg-white p-5 rounded-2xl border shadow-sm space-y-4"><div class="flex items-center justify-between"><h3 class="font-bold text-slate-800"><i class="fa-solid fa-user-graduate text-indigo-600 mr-2"></i>Ученики</h3><button onclick="openUserModal('student')" class="px-4 py-2 bg-indigo-600 hover:bg-indigo-700 text-white font-medium text-sm rounded-xl transition shadow"><i class="fa-solid fa-plus mr-1"></i> Добавить ученика</button></div>`;
+
+      if (students.length === 0) {
+        html += `<p class="text-slate-400 text-sm">Нет учеников.</p>`;
+      } else {
+        html += `<div class="divide-y">` + students.map(s => {
+          const cls = DB.classes.find(c => c.id === s.classId);
+          return `
+            <div class="py-3 flex items-center justify-between">
+              <div>
+                <div class="font-bold text-slate-800">${s.name}</div>
+                <div class="text-xs text-slate-500">Логин: <span class="font-semibold text-slate-700">${s.login}</span> | Пароль: <span class="font-semibold text-slate-700">${s.password}</span> | Класс: ${cls ? cls.name : 'Не указан'}</div>
+              </div>
+              <div class="flex items-center gap-2">
+                <button onclick="openUserModal('student', '${s.id}')" class="text-indigo-600 hover:text-indigo-800 text-sm font-medium p-2"><i class="fa-solid fa-pen"></i> Редактировать</button>
+                <button onclick="deleteUser('${s.id}')" class="text-red-500 hover:text-red-700 text-sm font-medium p-2"><i class="fa-solid fa-trash"></i> Удалить</button>
+              </div>
+            </div>
+          `;
+        }).join('') + `</div>`;
+      }
+      html += `</div>`;
+      document.getElementById('content-area').innerHTML = html;
+    }
+
+    async function deleteUser(id) {
+      if (!confirm('Вы уверены, что хотите удалить этого пользователя?')) return;
+      DB.users = DB.users.filter(u => u.id !== id);
+      await saveToCloud();
+      showMainDashboard();
+    }
+
+    // СМЕНА ПАРОЛЯ
+    function toggleSettingsModal() {
+      const modal = document.getElementById('modal-settings');
+      modal.classList.toggle('hidden');
+      document.getElementById('new-password-input').value = '';
+      document.getElementById('change-pass-msg').innerText = currentUser.allowPassChange ? '' : 'Директор запретил менять пароль.';
+    }
+
+    async function saveNewPassword() {
+      if (!currentUser.allowPassChange && currentUser.role !== 'director') {
+        alert('У вас нет разрешения на смену пароля.');
+        return;
+      }
+      const newPass = document.getElementById('new-password-input').value.trim();
+      if (!newPass) return;
+
+      const userInDb = DB.users.find(u => u.id === currentUser.id);
+      if (userInDb) {
+        userInDb.password = newPass;
+        currentUser.password = newPass;
+        await saveToCloud();
+        alert('Пароль успешно изменен!');
+        toggleSettingsModal();
+      }
+    }
+
+    // КЛАССЫ
+    function openAddClassModal() { document.getElementById('modal-add-class').classList.remove('hidden'); document.getElementById('class-name-input').value = ''; }
+    function closeAddClassModal() { document.getElementById('modal-add-class').classList.add('hidden'); }
+    async function saveClass() {
+      const name = document.getElementById('class-name-input').value.trim();
+      if (!name) return;
+      DB.classes.push({ id: Date.now().toString(), name: name });
+      await saveToCloud();
+      closeAddClassModal();
+      showMainDashboard();
+    }
+
+    // РАСПИСАНИЕ
+    async function showScheduleSection() {
+      await syncDataFromCloud();
+      document.getElementById('btn-back').classList.remove('hidden');
+      document.getElementById('content-area').innerHTML = `
+        <div class="bg-white p-5 rounded-2xl border shadow-sm space-y-4">
+          <h3 class="font-bold text-slate-800"><i class="fa-solid fa-calendar-days text-amber-500 mr-2"></i>Составить расписание</h3>
+          <div>
+            <label class="block text-xs font-semibold text-slate-700 mb-1">Выбрать класс</label>
+            <select id="schedule-class-select" onchange="loadScheduleText()" class="w-full px-3 py-2 border rounded-xl text-sm bg-white mb-3">
+              ${DB.classes.map(c => `<option value="${c.id}">${c.name}</option>`).join('')}
+            </select>
+          </div>
+          <div>
+            <label class="block text-xs font-semibold text-slate-700 mb-1">Расписание (введите предметы вручную)</label>
+            <textarea id="schedule-text" rows="6" class="w-full p-3 border rounded-xl text-sm focus:ring-2 focus:ring-amber-500 focus:outline-none" placeholder="Понедельник:&#10;1. Математика..."></textarea>
+          </div>
+          <button onclick="saveSchedule()" class="px-4 py-2 bg-amber-500 hover:bg-amber-600 text-white font-medium text-sm rounded-xl shadow">Сохранить расписание</button>
+        </div>
+      `;
+      loadScheduleText();
+    }
+
+    function loadScheduleText() {
+      const classId = document.getElementById('schedule-class-select').value;
+      if (classId) document.getElementById('schedule-text').value = DB.schedules[classId] || '';
+    }
+
+    async function saveSchedule() {
+      const classId = document.getElementById('schedule-class-select').value;
+      DB.schedules[classId] = document.getElementById('schedule-text').value;
+      await saveToCloud();
+      alert('Расписание сохранено!');
+    }
+
+    // ПРЕДМЕТЫ
+    async function showSubjectsSection() {
+      await syncDataFromCloud();
+      document.getElementById('btn-back').classList.remove('hidden');
+      let html = `<div class="bg-white p-5 rounded-2xl border shadow-sm space-y-4"><h3 class="font-bold text-slate-800"><i class="fa-solid fa-book text-purple-600 mr-2"></i>Управление предметами</h3><div class="flex gap-2"><input type="text" id="new-subject-input" class="flex-1 px-3 py-2 border rounded-xl text-sm" placeholder="Название предмета"><button onclick="addSubject()" class="px-4 py-2 bg-purple-600 hover:bg-purple-700 text-white text-sm font-medium rounded-xl shadow">Добавить</button></div><div class="divide-y pt-2">`;
+
+      DB.subjects.forEach((sub, idx) => {
+        html += `<div class="py-2.5 flex items-center justify-between"><span class="text-sm font-semibold text-slate-700">${sub}</span><div class="flex items-center gap-2"><button onclick="editSubject(${idx})" class="text-slate-400 hover:text-blue-600 text-xs font-medium"><i class="fa-solid fa-pen"></i> Редактировать</button><button onclick="deleteSubject(${idx})" class="text-slate-400 hover:text-red-600 text-xs font-medium"><i class="fa-solid fa-trash"></i> Удалить</button></div></div>`;
+      });
+      html += `</div></div>`;
+      document.getElementById('content-area').innerHTML = html;
+    }
+
+    async function addSubject() {
+      const val = document.getElementById('new-subject-input').value.trim();
+      if (!val) return;
+      DB.subjects.push(val);
+      await saveToCloud();
+      showSubjectsSection();
+    }
+
+    async function editSubject(idx) {
+      const newName = prompt('Новое название предмета:', DB.subjects[idx]);
+      if (newName && newName.trim() !== '') {
+        DB.subjects[idx] = newName.trim();
+        await saveToCloud();
+        showSubjectsSection();
+      }
+    }
+
+    async function deleteSubject(idx) {
+      if (!confirm('Удалить предмет?')) return;
+      DB.subjects.splice(idx, 1);
+      await saveToCloud();
+      showSubjectsSection();
+    }
+  </script>
+</body>
+</html>
