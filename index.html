@@ -8,7 +8,7 @@
   <script src="https://cdn.tailwindcss.com"></script>
   <!-- FontAwesome Иконки -->
   <link rel="stylesheet" href="https://cdnjs.cloudflare.com/ajax/libs/font-awesome/6.4.0/css/all.min.css">
-  <!-- Firebase SDK (Compat верcии для работы в одном HTML файле) -->
+  <!-- Firebase SDK (Compat версии) -->
   <script src="https://www.gstatic.com/firebasejs/9.23.0/firebase-app-compat.js"></script>
   <script src="https://www.gstatic.com/firebasejs/9.23.0/firebase-firestore-compat.js"></script>
   <style>
@@ -221,7 +221,7 @@
       users: [],
       classes: [],
       schedules: {},
-      subjects: ['Математика', 'Русский язык', 'История', 'Физика', 'Биология'],
+      subjects: [],
       grades: {}
     };
 
@@ -236,14 +236,12 @@
         if (doc.exists) {
           DB = doc.data();
         } else {
-          // Стандартная инициализация директора
+          // Запасной блок: создается только если база пустая
           DB = {
-            users: [
-              { id: '1', login: 'Denis860', password: 'school2026qwertyI', name: 'Денис Демидов', role: 'director', allowPassChange: true }
-            ],
+            users: [],
             classes: [],
             schedules: {},
-            subjects: ['Математика', 'Русский язык', 'История', 'Физика', 'Биология'],
+            subjects: [],
             grades: {}
           };
           await docRef.set(DB);
@@ -326,9 +324,9 @@
         welcomeTitle.innerText = `Добро пожаловать, ${currentUser.name}!`;
         welcomeSub.innerText = currentUser.role === 'director' ? 'Панель управления директора' : 'Панель управления учителя';
 
-        let availableClasses = DB.classes;
+        let availableClasses = DB.classes || [];
         if (currentUser.role === 'teacher') {
-          availableClasses = DB.classes.filter(c => currentUser.classId === c.id);
+          availableClasses = (DB.classes || []).filter(c => currentUser.classId === c.id);
         }
 
         let html = `<div><h3 class="text-lg font-bold text-slate-800 mb-4 flex items-center gap-2"><i class="fa-solid fa-chalkboard text-blue-600"></i> Список классов</h3>`;
@@ -338,8 +336,8 @@
         } else {
           html += `<div class="grid grid-cols-1 sm:grid-cols-2 md:grid-cols-3 lg:grid-cols-4 gap-4">`;
           availableClasses.forEach(cls => {
-            const studentCount = DB.users.filter(u => u.role === 'student' && u.classId === cls.id).length;
-            const teacherCount = DB.users.filter(u => u.role === 'teacher' && u.classId === cls.id).length;
+            const studentCount = (DB.users || []).filter(u => u.role === 'student' && u.classId === cls.id).length;
+            const teacherCount = (DB.users || []).filter(u => u.role === 'teacher' && u.classId === cls.id).length;
 
             html += `
               <div onclick="openClassView('${cls.id}')" class="bg-white p-5 rounded-2xl shadow-sm border border-slate-200 hover:shadow-md hover:border-blue-300 transition cursor-pointer flex flex-col justify-between group">
@@ -365,7 +363,7 @@
         welcomeTitle.innerText = `Добро пожаловать, ${currentUser.name}!`;
         welcomeSub.innerText = 'Кабинет ученика';
 
-        const userGrades = DB.grades[currentUser.id] || {};
+        const userGrades = (DB.grades && DB.grades[currentUser.id]) ? DB.grades[currentUser.id] : {};
         let goodCount = 0;
         let badCount = 0;
 
@@ -377,7 +375,7 @@
           });
         });
 
-        const cls = DB.classes.find(c => c.id === currentUser.classId);
+        const cls = (DB.classes || []).find(c => c.id === currentUser.classId);
 
         html = `
           <div class="grid grid-cols-1 md:grid-cols-3 gap-4 mb-6">
@@ -401,7 +399,7 @@
               <div class="space-y-3">
         `;
 
-        DB.subjects.forEach(sub => {
+        (DB.subjects || []).forEach(sub => {
           const gradesList = userGrades[sub] || [];
           html += `
             <div class="p-3 bg-slate-50 rounded-xl flex items-center justify-between">
@@ -414,7 +412,7 @@
         });
 
         html += `</div></div><div class="bg-white p-5 rounded-2xl border shadow-sm"><h3 class="font-bold text-slate-800 mb-4 flex items-center gap-2"><i class="fa-solid fa-calendar-week text-indigo-500"></i> Расписание</h3><div class="text-sm">`;
-        const scheduleText = DB.schedules[currentUser.classId];
+        const scheduleText = DB.schedules ? DB.schedules[currentUser.classId] : '';
         if (scheduleText) {
           html += `<div class="whitespace-pre-line bg-slate-50 p-4 rounded-xl text-slate-700">${scheduleText}</div>`;
         } else {
@@ -431,15 +429,15 @@
       currentOpenClass = classId;
       document.getElementById('btn-back').classList.remove('hidden');
 
-      const cls = DB.classes.find(c => c.id === classId);
-      const students = DB.users.filter(u => u.role === 'student' && u.classId === classId);
-      const teachers = DB.users.filter(u => u.role === 'teacher' && u.classId === classId);
+      const cls = (DB.classes || []).find(c => c.id === classId);
+      const students = (DB.users || []).filter(u => u.role === 'student' && u.classId === classId);
+      const teachers = (DB.users || []).filter(u => u.role === 'teacher' && u.classId === classId);
 
       document.getElementById('content-area').innerHTML = `
         <div class="space-y-6">
           <div class="bg-white p-5 rounded-2xl border shadow-sm flex items-center justify-between">
             <div>
-              <h2 class="text-2xl font-black text-slate-800">Класс ${cls.name}</h2>
+              <h2 class="text-2xl font-black text-slate-800">Класс ${cls ? cls.name : ''}</h2>
               <p class="text-xs text-slate-500 mt-1">Учеников: <span class="font-semibold text-slate-700 mr-3">${students.length}</span> Учителей: <span class="font-semibold text-slate-700">${teachers.length}</span></p>
             </div>
           </div>
@@ -449,7 +447,7 @@
               <div class="flex items-center gap-2">
                 <label class="text-xs font-semibold text-slate-600">Выбор предмета:</label>
                 <select id="journal-subject-select" onchange="renderJournalTable('${classId}')" class="px-3 py-1.5 border rounded-xl text-sm bg-white font-medium">
-                  ${DB.subjects.map(s => `<option value="${s}">${s}</option>`).join('')}
+                  ${(DB.subjects || []).map(s => `<option value="${s}">${s}</option>`).join('')}
                 </select>
               </div>
             </div>
@@ -462,10 +460,13 @@
 
     function renderJournalTable(classId) {
       const subjectSelect = document.getElementById('journal-subject-select');
-      if (!subjectSelect) return;
+      if (!subjectSelect || !subjectSelect.value) {
+        document.getElementById('journal-table-container').innerHTML = `<p class="text-center text-slate-400 py-6">Нет добавленных предметов.</p>`;
+        return;
+      }
       const subject = subjectSelect.value;
       const container = document.getElementById('journal-table-container');
-      const students = DB.users.filter(u => u.role === 'student' && u.classId === classId);
+      const students = (DB.users || []).filter(u => u.role === 'student' && u.classId === classId);
 
       if (students.length === 0) {
         container.innerHTML = `<p class="text-center text-slate-400 py-6">В этом классе пока нет учеников.</p>`;
@@ -477,7 +478,7 @@
       html += `</tr></thead><tbody class="divide-y text-sm">`;
 
       students.forEach(st => {
-        const studentGrades = (DB.grades[st.id] && DB.grades[st.id][subject]) ? DB.grades[st.id][subject] : [];
+        const studentGrades = (DB.grades && DB.grades[st.id] && DB.grades[st.id][subject]) ? DB.grades[st.id][subject] : [];
         html += `<tr class="hover:bg-slate-50/50"><td class="p-3 font-semibold text-slate-800">${st.name}</td>`;
 
         for (let lesson = 1; lesson <= 5; lesson++) {
@@ -504,6 +505,7 @@
     }
 
     async function saveGrade(studentId, subject, lesson, value) {
+      if (!DB.grades) DB.grades = {};
       if (!DB.grades[studentId]) DB.grades[studentId] = {};
       if (!DB.grades[studentId][subject]) DB.grades[studentId][subject] = [];
 
@@ -522,9 +524,9 @@
       await saveToCloud();
     }
 
-    // МОДАЛЬНЫЕ ОКНА УПРАВЛЕНИЯ ПОЛЬЗОВАТЕЛЯМИ (ДОБАВЛЕНИЕ И РЕДАКТИРОВАНИЕ)
+    // УПРАВЛЕНИЕ ПОЛЬЗОВАТЕЛЯМИ
     function openUserModal(role, userId = null) {
-      if (DB.classes.length === 0) { alert('Сначала создайте хотя бы один класс!'); return; }
+      if (!DB.classes || DB.classes.length === 0) { alert('Сначала создайте хотя бы один класс!'); return; }
 
       document.getElementById('edit-user-id').value = userId || '';
       document.getElementById('edit-user-role').value = role;
@@ -533,7 +535,6 @@
       select.innerHTML = DB.classes.map(c => `<option value="${c.id}">${c.name}</option>`).join('');
 
       if (userId) {
-        // Редактирование
         const u = DB.users.find(x => x.id === userId);
         document.getElementById('modal-user-title').innerText = `Редактировать (${role === 'teacher' ? 'Учителя' : 'Ученика'})`;
         document.getElementById('user-fullname').value = u.name;
@@ -542,7 +543,6 @@
         document.getElementById('user-class-select').value = u.classId || DB.classes[0].id;
         document.getElementById('user-allow-pass').checked = !!u.allowPassChange;
       } else {
-        // Создание нового
         document.getElementById('modal-user-title').innerText = `Добавить ${role === 'teacher' ? 'учителя' : 'ученика'}`;
         document.getElementById('user-fullname').value = '';
         document.getElementById('user-login').value = '';
@@ -566,8 +566,9 @@
 
       if (!name || !login || !pass) { alert('Заполните все поля!'); return; }
 
+      if (!DB.users) DB.users = [];
+
       if (id) {
-        // Обновление существующего
         const u = DB.users.find(x => x.id === id);
         if (u) {
           u.name = name;
@@ -577,7 +578,6 @@
           u.allowPassChange = allowPass;
         }
       } else {
-        // Создание нового
         DB.users.push({
           id: Date.now().toString(),
           name, login, password: pass, role, classId, allowPassChange: allowPass
@@ -594,14 +594,14 @@
     async function showTeachersSection() {
       await syncDataFromCloud();
       document.getElementById('btn-back').classList.remove('hidden');
-      const teachers = DB.users.filter(u => u.role === 'teacher');
+      const teachers = (DB.users || []).filter(u => u.role === 'teacher');
       let html = `<div class="bg-white p-5 rounded-2xl border shadow-sm space-y-4"><div class="flex items-center justify-between"><h3 class="font-bold text-slate-800"><i class="fa-solid fa-chalkboard-user text-blue-600 mr-2"></i>Учителя</h3><button onclick="openUserModal('teacher')" class="px-4 py-2 bg-blue-600 hover:bg-blue-700 text-white font-medium text-sm rounded-xl transition shadow"><i class="fa-solid fa-plus mr-1"></i> Добавить учителя</button></div>`;
 
       if (teachers.length === 0) {
         html += `<p class="text-slate-400 text-sm">Нет учителей.</p>`;
       } else {
         html += `<div class="divide-y">` + teachers.map(t => {
-          const cls = DB.classes.find(c => c.id === t.classId);
+          const cls = (DB.classes || []).find(c => c.id === t.classId);
           return `
             <div class="py-3 flex items-center justify-between">
               <div>
@@ -624,14 +624,14 @@
     async function showStudentsSection() {
       await syncDataFromCloud();
       document.getElementById('btn-back').classList.remove('hidden');
-      const students = DB.users.filter(u => u.role === 'student');
+      const students = (DB.users || []).filter(u => u.role === 'student');
       let html = `<div class="bg-white p-5 rounded-2xl border shadow-sm space-y-4"><div class="flex items-center justify-between"><h3 class="font-bold text-slate-800"><i class="fa-solid fa-user-graduate text-indigo-600 mr-2"></i>Ученики</h3><button onclick="openUserModal('student')" class="px-4 py-2 bg-indigo-600 hover:bg-indigo-700 text-white font-medium text-sm rounded-xl transition shadow"><i class="fa-solid fa-plus mr-1"></i> Добавить ученика</button></div>`;
 
       if (students.length === 0) {
         html += `<p class="text-slate-400 text-sm">Нет учеников.</p>`;
       } else {
         html += `<div class="divide-y">` + students.map(s => {
-          const cls = DB.classes.find(c => c.id === s.classId);
+          const cls = (DB.classes || []).find(c => c.id === s.classId);
           return `
             <div class="py-3 flex items-center justify-between">
               <div>
@@ -689,6 +689,7 @@
     async function saveClass() {
       const name = document.getElementById('class-name-input').value.trim();
       if (!name) return;
+      if (!DB.classes) DB.classes = [];
       DB.classes.push({ id: Date.now().toString(), name: name });
       await saveToCloud();
       closeAddClassModal();
@@ -705,7 +706,7 @@
           <div>
             <label class="block text-xs font-semibold text-slate-700 mb-1">Выбрать класс</label>
             <select id="schedule-class-select" onchange="loadScheduleText()" class="w-full px-3 py-2 border rounded-xl text-sm bg-white mb-3">
-              ${DB.classes.map(c => `<option value="${c.id}">${c.name}</option>`).join('')}
+              ${(DB.classes || []).map(c => `<option value="${c.id}">${c.name}</option>`).join('')}
             </select>
           </div>
           <div>
@@ -719,12 +720,17 @@
     }
 
     function loadScheduleText() {
-      const classId = document.getElementById('schedule-class-select').value;
-      if (classId) document.getElementById('schedule-text').value = DB.schedules[classId] || '';
+      const select = document.getElementById('schedule-class-select');
+      if (!select) return;
+      const classId = select.value;
+      if (classId) document.getElementById('schedule-text').value = (DB.schedules && DB.schedules[classId]) ? DB.schedules[classId] : '';
     }
 
     async function saveSchedule() {
-      const classId = document.getElementById('schedule-class-select').value;
+      const select = document.getElementById('schedule-class-select');
+      if (!select) return;
+      const classId = select.value;
+      if (!DB.schedules) DB.schedules = {};
       DB.schedules[classId] = document.getElementById('schedule-text').value;
       await saveToCloud();
       alert('Расписание сохранено!');
@@ -736,7 +742,7 @@
       document.getElementById('btn-back').classList.remove('hidden');
       let html = `<div class="bg-white p-5 rounded-2xl border shadow-sm space-y-4"><h3 class="font-bold text-slate-800"><i class="fa-solid fa-book text-purple-600 mr-2"></i>Управление предметами</h3><div class="flex gap-2"><input type="text" id="new-subject-input" class="flex-1 px-3 py-2 border rounded-xl text-sm" placeholder="Название предмета"><button onclick="addSubject()" class="px-4 py-2 bg-purple-600 hover:bg-purple-700 text-white text-sm font-medium rounded-xl shadow">Добавить</button></div><div class="divide-y pt-2">`;
 
-      DB.subjects.forEach((sub, idx) => {
+      (DB.subjects || []).forEach((sub, idx) => {
         html += `<div class="py-2.5 flex items-center justify-between"><span class="text-sm font-semibold text-slate-700">${sub}</span><div class="flex items-center gap-2"><button onclick="editSubject(${idx})" class="text-slate-400 hover:text-blue-600 text-xs font-medium"><i class="fa-solid fa-pen"></i> Редактировать</button><button onclick="deleteSubject(${idx})" class="text-slate-400 hover:text-red-600 text-xs font-medium"><i class="fa-solid fa-trash"></i> Удалить</button></div></div>`;
       });
       html += `</div></div>`;
@@ -746,6 +752,7 @@
     async function addSubject() {
       const val = document.getElementById('new-subject-input').value.trim();
       if (!val) return;
+      if (!DB.subjects) DB.subjects = [];
       DB.subjects.push(val);
       await saveToCloud();
       showSubjectsSection();
