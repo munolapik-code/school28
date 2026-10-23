@@ -183,6 +183,11 @@
           <input type="checkbox" id="user-allow-pass" class="w-4 h-4 text-blue-600 rounded">
           <label for="user-allow-pass" class="text-xs text-slate-700 font-medium">Дозволити змінювати пароль</label>
         </div>
+        <!-- НОВЕ ПОЛЕ: Галочка заблокувати акаунт -->
+        <div class="flex items-center gap-2 pt-1">
+          <input type="checkbox" id="user-is-blocked" class="w-4 h-4 text-red-600 rounded">
+          <label for="user-is-blocked" class="text-xs text-red-600 font-semibold">Заблокувати акаунт</label>
+        </div>
       </div>
       <div class="flex justify-end gap-2 pt-2">
         <button onclick="closeUserModal()" class="px-4 py-2 bg-slate-100 rounded-xl text-slate-700 font-medium text-sm">Скасувати</button>
@@ -275,10 +280,11 @@
       }
     }
 
-    // ВХІД
+    // ВХІД З ПЕРЕВІРКОЮ БЛОКУВАННЯ
     document.getElementById('login-form').addEventListener('submit', async (e) => {
       e.preventDefault();
       const btn = document.getElementById('login-btn');
+      const errorDiv = document.getElementById('login-error');
       btn.innerText = "Завантаження...";
       
       const login = document.getElementById('login-input').value.trim();
@@ -289,13 +295,21 @@
         btn.innerHTML = `<i class="fa-solid fa-right-to-bracket"></i> Увійти`;
 
         if (user) {
+          // ПЕРЕВІРКА НА БЛОКУВАННЯ
+          if (user.isBlocked) {
+            errorDiv.innerText = "Акаунт заблоковано";
+            errorDiv.classList.remove('hidden');
+            return;
+          }
+
           currentUser = user;
-          document.getElementById('login-error').classList.add('hidden');
+          errorDiv.classList.add('hidden');
           document.getElementById('login-screen').classList.add('hidden');
           document.getElementById('app-screen').classList.remove('hidden');
           initApp();
         } else {
-          document.getElementById('login-error').classList.remove('hidden');
+          errorDiv.innerText = "Невірний логін або пароль";
+          errorDiv.classList.remove('hidden');
         }
       });
     });
@@ -585,12 +599,14 @@
         document.getElementById('user-password').value = u.password;
         document.getElementById('user-class-select').value = u.classId || DB.classes[0].id;
         document.getElementById('user-allow-pass').checked = !!u.allowPassChange;
+        document.getElementById('user-is-blocked').checked = !!u.isBlocked;
       } else {
         document.getElementById('modal-user-title').innerText = `Додати ${role === 'teacher' ? 'вчителя' : 'учня'}`;
         document.getElementById('user-fullname').value = '';
         document.getElementById('user-login').value = '';
         document.getElementById('user-password').value = '';
         document.getElementById('user-allow-pass').checked = true;
+        document.getElementById('user-is-blocked').checked = false;
       }
 
       document.getElementById('modal-user').classList.remove('hidden');
@@ -606,6 +622,7 @@
       const pass = document.getElementById('user-password').value.trim();
       const classId = document.getElementById('user-class-select').value;
       const allowPass = document.getElementById('user-allow-pass').checked;
+      const isBlocked = document.getElementById('user-is-blocked').checked;
 
       if (!name || !login || !pass) { alert('Заповніть усі поля!'); return; }
 
@@ -619,11 +636,12 @@
           u.password = pass;
           u.classId = classId;
           u.allowPassChange = allowPass;
+          u.isBlocked = isBlocked;
         }
       } else {
         DB.users.push({
           id: Date.now().toString(),
-          name, login, password: pass, role, classId, allowPassChange: allowPass
+          name, login, password: pass, role, classId, allowPassChange: allowPass, isBlocked
         });
       }
 
@@ -648,7 +666,10 @@
           return `
             <div class="py-3 flex items-center justify-between">
               <div>
-                <div class="font-bold text-slate-800">${t.name}</div>
+                <div class="font-bold text-slate-800 flex items-center gap-2">
+                  ${t.name}
+                  ${t.isBlocked ? `<span class="text-[10px] bg-red-100 text-red-700 px-2 py-0.5 rounded-full font-bold">Заблоковано</span>` : ''}
+                </div>
                 <div class="text-xs text-slate-500">Логін: <span class="font-semibold text-slate-700">${t.login}</span> | Пароль: <span class="font-semibold text-slate-700">${t.password}</span> | Клас: ${cls ? cls.name : 'Не прив\'язаний'}</div>
               </div>
               <div class="flex items-center gap-2">
@@ -678,7 +699,10 @@
           return `
             <div class="py-3 flex items-center justify-between">
               <div>
-                <div class="font-bold text-slate-800">${s.name}</div>
+                <div class="font-bold text-slate-800 flex items-center gap-2">
+                  ${s.name}
+                  ${s.isBlocked ? `<span class="text-[10px] bg-red-100 text-red-700 px-2 py-0.5 rounded-full font-bold">Заблоковано</span>` : ''}
+                </div>
                 <div class="text-xs text-slate-500">Логін: <span class="font-semibold text-slate-700">${s.login}</span> | Пароль: <span class="font-semibold text-slate-700">${s.password}</span> | Клас: ${cls ? cls.name : 'Не вказано'}</div>
               </div>
               <div class="flex items-center gap-2">
